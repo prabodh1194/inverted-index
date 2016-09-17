@@ -6,17 +6,12 @@
 #include <algorithm>
 #include <string>
 #include <set>
+#include <mpi.h>
 #include "porter.h"
 
 using namespace std;
 
-int world_size, world_rank;
-
-void
-reduce(map<string, set<int> > dict)
-{
-
-}
+int size, world_rank;
 
 void
 parse(ifstream &fp, const vector<string>& sw)
@@ -24,6 +19,7 @@ parse(ifstream &fp, const vector<string>& sw)
     string line, doc, id, title, text, token;
     map<string, set<int> > dict;
     smatch sm;
+    set<int> myset;
 
     while(!fp.eof())
     {
@@ -71,24 +67,41 @@ parse(ifstream &fp, const vector<string>& sw)
 
     while(ss1 >> token)
         dict[token].insert(idi);
-    reduce(dict);
+
+    //write to disk
+    for (map<string,set<int>>::iterator it=dict.begin(); it!=dict.end(); ++it)
+    {
+        myset = it->second;
+        cout << it->first << " => ";
+        for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
+            std::cout << ' ' << *it1;
+        cout << '\n';
+    }
 }
 
 void
-createIndex(string file, const vector<string>& sw)
+createIndex(const vector<string>& sw)
 {
-    int length = -1, i = 0, p = -1;
+    int i = world_rank;
     string stopwords, line, title = "";
-    ifstream fp (file.c_str());
-    parse(fp, sw);
-    fp.close();
+
+    while(true)
+    {
+        string file = to_string(i);
+        ifstream fp (file.c_str());
+        if(fp.fail())
+            return;
+        parse(fp, sw);
+        fp.close();
+        i += size;
+    }
 }
 
 int
 main(void)
 {
     MPI_Init(NULL, NULL);
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
     string stopwords;
@@ -102,7 +115,7 @@ main(void)
     }
     swfp.close();
 
-    createIndex("englishText_0_10000", sw);
+    createIndex(sw);
 
     MPI_Finalize();
     return 0;

@@ -14,12 +14,10 @@ using namespace std;
 int size, world_rank;
 
 void
-parse(ifstream &fp, const vector<string>& sw)
+parse(ifstream &fp, const vector<string>& sw, map<string, set<int> >& dict)
 {
     string line, doc, id, title, text, token;
-    map<string, set<int> > dict;
     smatch sm;
-    set<int> myset;
 
     while(!fp.eof())
     {
@@ -67,16 +65,6 @@ parse(ifstream &fp, const vector<string>& sw)
 
     while(ss1 >> token)
         dict[token].insert(idi);
-
-    //write to disk
-    for (map<string,set<int>>::iterator it=dict.begin(); it!=dict.end(); ++it)
-    {
-        myset = it->second;
-        cout << it->first << " => ";
-        for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
-            std::cout << ' ' << *it1;
-        cout << '\n';
-    }
 }
 
 void
@@ -84,17 +72,33 @@ createIndex(const vector<string>& sw)
 {
     int i = world_rank;
     string stopwords, line, title = "";
+    map<string, set<int> > dict;
+    set<int> myset;
 
     while(true)
     {
         string file = to_string(i);
         ifstream fp (file.c_str());
         if(fp.fail())
-            return;
-        parse(fp, sw);
+            break;
+        cerr<<"Parse "<<file<<"from " <<world_rank<<endl;
+        parse(fp, sw, dict);
         fp.close();
         i += size;
     }
+    //write to disk
+
+    string out = "out"+to_string(world_rank);
+    ofstream ofs (out, ofstream::out);
+    for (map<string,set<int>>::iterator it=dict.begin(); it!=dict.end(); ++it)
+    {
+        myset = it->second;
+        ofs << it->first << ":";
+        for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
+            ofs << *it1 << ',';
+        ofs << "\b\n";
+    }
+    ofs.close();
 }
 
 int
@@ -116,6 +120,8 @@ main(void)
     swfp.close();
 
     createIndex(sw);
+
+    //start reduce
 
     MPI_Finalize();
     return 0;

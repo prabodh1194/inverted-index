@@ -14,6 +14,60 @@ using namespace std;
 int size, world_rank;
 
 void
+sendFiles(int i)
+{
+    string line;
+    string out = "out_"+to_string(world_rank)+"_"+to_string(i);
+    ifstream ofs(out.c_str());
+    while(!ofs.eof())
+    {
+        getline(ofs, line);
+        MPI_Send(line.c_str(), line.size()+1, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+        line.clear();
+    }
+    ofs.close();
+    cerr<<world_rank<<" "<<i<<"Closeing\n";
+}
+
+void
+recvFiles()
+{
+    int count = 0;
+    char res[256];
+    MPI_Status status;
+
+    string out = "out_"+to_string(world_rank)+"_"+to_string(world_rank);
+    ofstream ofs(out.c_str(), ofstream::app);
+    while(true)
+    {
+        MPI_Recv(&res, 256, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        string line(res);
+        if(line.size() == 0)
+        {
+            cerr<<world_rank<<"Done\n";
+            count++;
+            if(count+1 >= size)
+                return;
+            continue;
+        }
+        line += "\n";
+        ofs<<line;
+    }
+    ofs.close();
+}
+
+void
+reduce()
+{
+    for(int i = 0; i < size; i++)
+    {
+        if(i == world_rank)
+            recvFiles();
+        sendFiles(i);
+    }
+}
+
+void
 parse(ifstream &fp, const vector<string>& sw, map<string, set<int> >& dict)
 {
     string line, doc, id, title, text, token;
@@ -47,8 +101,8 @@ parse(ifstream &fp, const vector<string>& sw, map<string, set<int> >& dict)
     doc = "";
     text = title + text;
     transform(text.begin(), text.end(), text.begin(), ::tolower);
-    regex alpha ("[^a-z0-9 ]");
-    text = regex_replace(text, alpha, "");
+    regex alpha ("[^[:alpha:] ]");
+    text = regex_replace(text, alpha, " ");
 
     stringstream ss(text);
 
@@ -81,24 +135,34 @@ createIndex(const vector<string>& sw)
         ifstream fp (file.c_str());
         if(fp.fail())
             break;
-        cerr<<"Parse "<<file<<"from " <<world_rank<<endl;
+        cerr<<"Parse "<<file<<"from " <<world_rank<<"\n";
         parse(fp, sw, dict);
         fp.close();
         i += size;
     }
     //write to disk
+    ofstream ofs[size];
 
-    string out = "out"+to_string(world_rank);
-    ofstream ofs (out, ofstream::out);
-    for (map<string,set<int>>::iterator it=dict.begin(); it!=dict.end(); ++it)
+    for(i = 0; i < size; i++)
+    {
+        string out = "out_"+to_string(world_rank)+"_"+to_string(i);
+        ofs[i].open(out.c_str(), ofstream::out);
+    }
+
+    for (map<string,set<int> >::iterator it=dict.begin(); it!=dict.end(); ++it)
     {
         myset = it->second;
-        ofs << it->first << ":";
+        int ch = it->first[0]-'a';
+        ofs[ch % size] << it->first << ":";
         for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
-            ofs << *it1 << ',';
-        ofs << "\b\n";
+            ofs[ch % size] << *it1 << ',';
+        long pos = ofs[ch % size].tellp();
+        ofs[ch % size].seekp(pos-1);
+        ofs[ch % size] << "\n";
     }
-    ofs.close();
+
+    for(i = 0; i < size; i++)
+        ofs[i].close();
 }
 
 int
@@ -122,6 +186,7 @@ main(void)
     createIndex(sw);
 
     //start reduce
+    reduce();
 
     MPI_Finalize();
     return 0;

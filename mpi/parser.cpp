@@ -14,6 +14,17 @@ using namespace std;
 int size, world_rank;
 
 void
+query(const map<string, set<int> >& dict)
+{
+    if(world_rank == 0)
+    {
+    }
+    else
+    {
+    }
+}
+
+void
 sendFiles(int i)
 {
     string line;
@@ -57,7 +68,7 @@ recvFiles()
 }
 
 void
-reduce()
+reduce(map<string, set<int> >& dict)
 {
     for(int i = 0; i < size; i++)
     {
@@ -65,6 +76,36 @@ reduce()
             recvFiles();
         sendFiles(i);
     }
+
+    string list, token, out = "out_"+to_string(world_rank)+"_"+to_string(world_rank);
+    
+    ifstream ifs(out.c_str());
+    string out1 = "in"+out;
+    ofstream ofs(out1.c_str(), ofstream::out);
+
+    while(!ifs.eof())
+    {
+        ifs >> token >> list;
+        stringstream ss(list);
+        while(getline(ss, list, ','))
+            dict[token].insert(atoi(list.c_str()));
+    }
+
+    //debug
+    set<int> myset;
+    for (map<string,set<int> >::iterator it=dict.begin(); it!=dict.end(); ++it)
+    {
+        myset = it->second;
+        ofs << it->first << " ";
+        for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
+            ofs << *it1 << ',';
+        long pos = ofs.tellp();
+        ofs.seekp(pos-1);
+        ofs << "\n";
+    }
+
+    ifs.close();
+    ofs.close();
 }
 
 void
@@ -153,7 +194,7 @@ createIndex(const vector<string>& sw)
     {
         myset = it->second;
         int ch = it->first[0]-'a';
-        ofs[ch % size] << it->first << ":";
+        ofs[ch % size] << it->first << " ";
         for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
             ofs[ch % size] << *it1 << ',';
         long pos = ofs[ch % size].tellp();
@@ -173,6 +214,7 @@ main(void)
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
     string stopwords;
+    map<string, set<int> > dict;
     vector<string> sw;
 
     ifstream swfp ("stopwords.dat");
@@ -186,7 +228,9 @@ main(void)
     createIndex(sw);
 
     //start reduce
-    reduce();
+    reduce(dict);
+
+    query(dict);
 
     MPI_Finalize();
     return 0;

@@ -14,13 +14,69 @@ using namespace std;
 int size, world_rank;
 
 void
-query(const map<string, set<int> >& dict)
+query(map<string, set<int> >& dict)
 {
+    char res[256];
+    MPI_Status status;
     if(world_rank == 0)
     {
+        string querys;
+        int c = 0;
+        while(true)
+        {
+            cout << "query> ";
+            getline(cin, querys);
+            if(querys.size() == 0)
+            {
+                c++;
+                if(c == 2)
+                    return;
+                continue;
+            }
+            else
+                c = 0;
+            querys = stemfile(querys);
+            int i = querys[0]-'a';
+            i = i % size;
+            if(i == 0)
+            {
+                set<int> myset = dict[querys];
+                for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
+                    cout << *it1 << ',';
+                cout << "\b \n";
+            }
+            else
+            {
+                MPI_Send(querys.c_str(), querys.size()+1, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+                while(true)
+                {
+                    MPI_Recv(&res, 256, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
+                    string result(res);
+                    cout<<result;
+                    if(result.size() < 256)
+                        break;
+                }
+                cout<<"\n";
+            }
+        }
     }
     else
     {
+        string result;
+        while(true)
+        {
+            MPI_Recv(&res, 256, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &status);
+            string querys(res);
+            set<int> myset = dict[querys];
+            result = "";
+            for (set<int>::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
+            {
+                result += to_string(*it1) + ',';
+            }
+            result[result.size()-1] = '\n';
+            result += "\0";
+            MPI_Send(result.c_str(), result.size()+1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+        }
     }
 }
 

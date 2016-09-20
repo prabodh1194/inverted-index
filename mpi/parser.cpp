@@ -7,6 +7,8 @@
 #include <string>
 #include <set>
 #include <mpi.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "porter.h"
 
 using namespace std;
@@ -16,7 +18,6 @@ int size, world_rank;
 void
 query(map<string, set<int> >& dict)
 {
-    char res[256];
     MPI_Status status;
     if(world_rank == 0)
     {
@@ -47,15 +48,20 @@ query(map<string, set<int> >& dict)
             }
             else
             {
-                MPI_Send(querys.c_str(), querys.size()+1, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-                while(true)
-                {
-                    MPI_Recv(&res, 256, MPI_CHAR, i, 0, MPI_COMM_WORLD, &status);
-                    string result(res);
-                    cout<<result;
-                    if(result.size() < 256)
-                        break;
-                }
+                MPI_Send(querys.c_str(), querys.size()+1, MPI_CHAR, i, 1, MPI_COMM_WORLD);
+                int charSize;
+
+                MPI_Probe(i, 1, MPI_COMM_WORLD, &status);
+                MPI_Get_count(&status, MPI_CHAR, &charSize);
+
+                if(charSize<0)
+                    continue;
+
+                char res[charSize];
+
+                MPI_Recv(&res, charSize, MPI_CHAR, i, 1, MPI_COMM_WORLD, &status);
+                string result(res);
+                cout<<result;
                 cout<<"\n";
             }
         }
@@ -65,7 +71,8 @@ query(map<string, set<int> >& dict)
         string result;
         while(true)
         {
-            MPI_Recv(&res, 256, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &status);
+            char res[256];
+            MPI_Recv(&res, 256, MPI_CHAR, 0, 1, MPI_COMM_WORLD, &status);
             string querys(res);
             set<int> myset = dict[querys];
             result = "";
@@ -75,7 +82,7 @@ query(map<string, set<int> >& dict)
             }
             result[result.size()-1] = '\n';
             result += "\0";
-            MPI_Send(result.c_str(), result.size()+1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(result.c_str(), result.size()+1, MPI_CHAR, 0, 1, MPI_COMM_WORLD);
         }
     }
 }
@@ -99,15 +106,19 @@ sendFiles(int i)
 void
 recvFiles()
 {
-    int count = 0;
-    char res[256];
+    int count = 0, charSize;
     MPI_Status status;
 
     string out = "out_"+to_string(world_rank)+"_"+to_string(world_rank);
     ofstream ofs(out.c_str(), ofstream::app);
     while(true)
     {
-        MPI_Recv(&res, 256, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        MPI_Probe(MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+        MPI_Get_count(&status, MPI_CHAR, &charSize);
+        char res[charSize];
+        if(charSize<0)
+            continue;
+        MPI_Recv(&res, charSize, MPI_CHAR, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
         string line(res);
         if(line.size() == 0)
         {
@@ -165,57 +176,67 @@ reduce(map<string, set<int> >& dict)
 }
 
 void
-parse(ifstream &fp, const vector<string>& sw, map<string, set<int> >& dict)
+parse(ifstream &fp, const vector<string>& sw, map<string, set<int> >& dict, size_t fsize)
 {
-    string line, doc, id, title, text, token;
+    size_t tots=0;
+    int idi, flag = 0;
+    string doc, line, id, text, token;
     smatch sm;
-
-    while(!fp.eof())
-    {
-        fp >> line;
-        doc += line+" ";
-        if(line == "</doc>")
-            break;
-    }
-
     regex reid ("id=\"([0-9]+)\"");
     regex retitle ("title=\"(.*)\" non");
     regex retext (">(.*)</");
 
-    regex_search(doc, sm, reid);
-    id = sm[1];
-    int idi = atoi(id.c_str());
-
-    regex_search(doc, sm, retitle);
-    title = sm[1];
-
-    regex_search(doc, sm, retext);
-    text = sm[1];
-
-    if(id == "" || title == "" || text == "")
-        return;
-
-    doc = "";
-    text = title + text;
-    transform(text.begin(), text.end(), text.begin(), ::tolower);
-    regex alpha ("[^[:alpha:] ]");
-    text = regex_replace(text, alpha, " ");
-
-    stringstream ss(text);
-
-    while(ss >> token)
+    while(!fp.eof())
     {
-        if(binary_search(sw.begin(), sw.end(), token))
+        doc.clear();
+        fp >> line;
+        tots += line.size();
+
+        if(line == "</doc>")
+        {
+            cerr<<"\r"<<tots<<"/"<<fsize<<"("<<world_rank<<"-"<<(tots*100/fsize)<<"%)";
+            id.clear();
+            flag = 0;
+            continue;
+        }
+
+        if(id.empty())
+        {
+            regex_search(line, sm, reid);
+            id = sm[1];
+            idi = atoi(id.c_str());
+            continue;
+        }
+
+        if(line[line.size()-1] == '>' && flag == 0)
+        {
+            flag = 1;
+            continue;
+        }
+
+        if(flag == 0)
             continue;
 
-        //stem
-        doc += token + " ";
-    }
-    doc = stemfile(doc);
-    stringstream ss1(doc);
+        transform(line.begin(), line.end(), line.begin(), ::tolower);
+        regex alpha ("[^[:alpha:] ]");
+        line = regex_replace(line, alpha, " ");
 
-    while(ss1 >> token)
-        dict[token].insert(idi);
+        stringstream ss(line);
+
+        while(ss >> token)
+        {
+            if(binary_search(sw.begin(), sw.end(), token))
+                continue;
+
+            //stem
+            doc += token + " ";
+        }
+        doc = stemfile(doc);
+        stringstream ss1(doc);
+
+        while(ss1 >> token)
+            dict[token].insert(idi);
+    }
 }
 
 void
@@ -233,7 +254,10 @@ createIndex(const vector<string>& sw)
         if(fp.fail())
             break;
         cerr<<"Parse "<<file<<"from " <<world_rank<<"\n";
-        parse(fp, sw, dict);
+
+        struct stat st;
+        stat(file.c_str(), &st);
+        parse(fp, sw, dict, st.st_size);
         fp.close();
         i += size;
     }
@@ -269,6 +293,8 @@ main(void)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
+    cerr<<world_rank<<" "<<getpid()<<"\n";
+
     string stopwords;
     map<string, set<int> > dict;
     vector<string> sw;
@@ -285,6 +311,8 @@ main(void)
 
     //start reduce
     reduce(dict);
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
     query(dict);
 

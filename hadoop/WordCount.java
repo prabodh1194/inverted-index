@@ -17,6 +17,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -25,10 +26,13 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class WordCount
 {
-    public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable>
+    public static class TokenizerMapper extends Mapper<Object, Text, Text, Text>
     {
         private IntWritable idi;
         private Text word = new Text();
+        private int flag = 0;
+        private String id = "";
+
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
             FileInputStream fis = new FileInputStream(new File("stopwords.dat"));
@@ -42,7 +46,6 @@ public class WordCount
 
             br.close();
 
-            int id = -1, flag = 0;
             Set<Integer> set = new HashSet<Integer>();
             Map<String, Set<Integer> > dict = new HashMap<String, Set<Integer> >();
             String a = value.toString();
@@ -56,16 +59,17 @@ public class WordCount
                 token = strtok.nextToken();
                 if(token.equals("</doc>"))
                 {
-                    id = -1;
+                    id = "";
                     flag = 0;
+                    continue;
                 }
 
-                if(id == -1)
+                if(id.equals(""))
                 {
                     m = reid.matcher(token);
                     if(!m.find())                    
                         continue;
-                    id = Integer.parseInt(m.group(1));
+                    id = m.group(1);
                     continue;
                 }
 
@@ -91,25 +95,28 @@ public class WordCount
                     if(Collections.binarySearch(sw, token) >= 0)
                         continue;
                     token = st.stem(token);
-                    System.out.println(token);
-                    idi = new IntWritable(id);
                     word.set(token);
-                    context.write(word, idi);
+                    context.write(word, new Text(id));
                 }
             }
         }
     }
 
-    public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWritable>
+    public static class IntSumReducer extends Reducer<Text,Text,Text,Text>
     {
-        private IntWritable result = new IntWritable();
-        public void reduce(Text key, Iterable<IntWritable> values, Context context ) throws IOException, InterruptedException
+        public void reduce(Text key, Iterable<Text> values, Context context ) throws IOException, InterruptedException
         {
-            for (IntWritable val : values)
+            Set<String> s = new HashSet<String>();
+            for (Text val : values)
             {
-                System.out.println(key);
-                System.out.println(val.get());
+                s.add(val.toString());
             }
+
+            StringBuilder sb = new StringBuilder();
+            for (String val : s)
+                sb.append(val+",");
+
+            context.write(key, new Text(sb.toString()));
         }
     }
 
@@ -122,7 +129,7 @@ public class WordCount
         job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         System.exit(job.waitForCompletion(true) ? 0 : 1);

@@ -41,6 +41,7 @@ public class WordCount
             String token, line = null;
             ArrayList<String> sw = new ArrayList<String>();
             Stemmer st = new Stemmer();
+            long len, pos = 0;
 
             while((line = br.readLine()) != null)
                 sw.add(line);
@@ -58,6 +59,8 @@ public class WordCount
             while(strtok.hasMoreTokens())
             {
                 token = strtok.nextToken();
+                len = token.length();
+
                 if(token.equals("</doc>"))
                 {
                     id = "";
@@ -89,6 +92,10 @@ public class WordCount
                 StringTokenizer strtok1 = new StringTokenizer(token," ");
                 StringBuilder sb = new StringBuilder();
 
+                sb.append(id);
+                sb.append(",");
+                sb.append(Long.toString(pos));
+
                 while(strtok1.hasMoreTokens())
                 {
                     token = strtok1.nextToken();
@@ -97,8 +104,9 @@ public class WordCount
                         continue;
                     token = st.stem(token);
                     word.set(token);
-                    context.write(word, new Text(id));
+                    context.write(word, new Text(sb.toString()));
                 }
+                pos += len+1;
             }
         }
     }
@@ -107,22 +115,41 @@ public class WordCount
     {
         public void reduce(Text key, Iterable<Text> values, Context context ) throws IOException, InterruptedException
         {
+            Map<String, Set<String> > m = new HashMap<String, Set<String> >();
             Set<String> s = new HashSet<String>();
+            String kv[] = new String[2];
             for (Text val : values)
             {
-                s.add(val.toString());
+                s.clear();
+                kv = (val.toString()).split(",");
+                if(kv.length < 2)
+                    continue;
+
+                if(m.containsKey(kv[0]))
+                    s = m.get(kv[0]);
+                s.add(kv[1]);
+                m.put(kv[0], s);
             }
 
             StringBuilder sb = new StringBuilder();
-            for (String val : s)
-                sb.append(val+",");
-
-            context.write(key, new Text(sb.toString()));
+            for (String ke: m.keySet())
+            {
+                sb.append(ke);
+                sb.append(":");
+                for(String val : m.get(ke))
+                {
+                    sb.append(val);
+                    sb.append(":");
+                }
+                sb.deleteCharAt(sb.length()-1);
+                sb.append(",");
+            }
+            String text = sb.toString();
+            context.write(key, new Text(text));
         }
     }
 
     //Partitioner class
-    
     public static class InvertPartitioner extends Partitioner <Text,Text>
     {
         @Override
@@ -149,7 +176,7 @@ public class WordCount
         job.setJarByClass(WordCount.class);
         job.setMapperClass(TokenizerMapper.class);
 
-        job.setCombinerClass(IntSumReducer.class);
+        //job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
         job.setPartitionerClass(InvertPartitioner.class);
         job.setNumReduceTasks(26);

@@ -7,17 +7,20 @@ import java.util.StringTokenizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.Scanner;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -33,6 +36,7 @@ public class WordCount
         private Text word = new Text();
         private int flag = 0;
         private String id = "";
+        private long pos = 0;
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
@@ -41,7 +45,7 @@ public class WordCount
             String token, line = null;
             ArrayList<String> sw = new ArrayList<String>();
             Stemmer st = new Stemmer();
-            long len, pos = 0;
+            long len;
 
             while((line = br.readLine()) != null)
                 sw.add(line);
@@ -115,19 +119,23 @@ public class WordCount
     {
         public void reduce(Text key, Iterable<Text> values, Context context ) throws IOException, InterruptedException
         {
-            Map<String, Set<String> > m = new HashMap<String, Set<String> >();
-            Set<String> s = new HashSet<String>();
-            String kv[] = new String[2];
+            Map<String, StringBuilder> m = new HashMap<String, StringBuilder>();
             for (Text val : values)
             {
-                s.clear();
+                StringBuilder s = new StringBuilder();
+                String kv[] = new String[2];
+
                 kv = (val.toString()).split(",");
+
                 if(kv.length < 2)
                     continue;
 
                 if(m.containsKey(kv[0]))
+                {
                     s = m.get(kv[0]);
-                s.add(kv[1]);
+                }
+                s.append(kv[1]);
+                s.append(":");
                 m.put(kv[0], s);
             }
 
@@ -136,14 +144,11 @@ public class WordCount
             {
                 sb.append(ke);
                 sb.append(":");
-                for(String val : m.get(ke))
-                {
-                    sb.append(val);
-                    sb.append(":");
-                }
+                sb.append((m.get(ke)).toString());
                 sb.deleteCharAt(sb.length()-1);
                 sb.append(",");
             }
+            sb.deleteCharAt(sb.length()-1);
             String text = sb.toString();
             context.write(key, new Text(text));
         }
@@ -169,14 +174,138 @@ public class WordCount
         }
     }
 
+    //Query Mapper
+    public static class QueryMapper extends Mapper<Object, Text, Text, Text>
+    {
+        @Override
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException
+        {
+            Configuration conf = context.getConfiguration();
+            String pairs, token, query = conf.get("query");
+            String word = value.toString();
+
+            int pos = word.indexOf(' ');
+            word = word.substring(0, pos);
+
+            Stemmer st = new Stemmer();
+            query = st.stem(query+" ");
+
+            pos = query.indexOf(word);
+
+            if(pos == -1 || query.charAt(pos+word.length()) != ' ')
+            {
+                context.write(new Text(""), new Text(""));
+                return;
+            }
+
+            pairs = (value.toString()).substring(word.length());
+            
+            StringTokenizer tok = new StringTokenizer(pairs, ",");
+
+            while(tok.hasMoreTokens())
+            {
+                token = tok.nextToken();
+                pos = token.indexOf(':');
+                context.write(new Text(token.substring(0,pos).trim()), new Text(word+":"+token.substring(pos+1)));
+            }
+        }
+    }
+
+    //Query Reducer
+    public static class QueryReducer extends Reducer<Text,Text,Text,Text>
+    {
+        @Override
+        public void reduce(Text key, Iterable<Text> values, Context context ) throws IOException, InterruptedException
+        {
+            Configuration conf = context.getConfiguration();
+            String query = conf.get("query");
+            String token, word, posList;
+            int pos;
+            Map<String, String> m = new HashMap<String, String>();
+
+            Stemmer st = new Stemmer();
+            query = st.stem(query+" ");
+
+            if(key.toString().length() == 0)
+                return;
+
+            for(Text value: values)
+            {
+                word = value.toString();
+                pos = word.indexOf(':');
+                posList = word.substring(pos+1);
+                word = word.substring(0,pos);
+                System.out.println(key+" "+word+" "+posList+" "+pos);
+                m.put(word, posList);
+            }
+
+            StringTokenizer tok = new StringTokenizer(query);
+
+            while(tok.hasMoreTokens())
+            {
+                if(m.get(tok.nextToken()) == null)
+                    return;
+            }
+
+            System.out.println("Start merging");
+
+            tok = new StringTokenizer(query);
+            String w1[], w2[];
+            int wi=0, wj=0, len, len1;
+            int w11[], w22[]; 
+
+            token = tok.nextToken();
+            len1 = token.length();
+            w1 = (m.get(token)).split(":");
+            
+            w11 = new int[w1.length];
+
+            for(int i = 0; i < w1.length; i++)
+                w11[i] = Integer.parseInt(w1[i]);
+            Arrays.sort(w11);
+
+            while(tok.hasMoreTokens())
+            {
+                token = tok.nextToken();
+                w2 = (m.get(token)).split(":");
+                w22 = new int[w2.length];
+
+                for(int i = 0; i < w2.length; i++)
+                    w22[i] = Integer.parseInt(w2[i]);
+                Arrays.sort(w22);
+
+                wi = wj = 0;
+
+                System.out.println(Arrays.toString(w11));
+                System.out.println(Arrays.toString(w22));
+
+                while(wi < w1.length && wj < w2.length)
+                {
+                    len = w22[wj] - w11[wi];
+                    if(len-1 == len1)
+                    {
+                        System.err.print(key+":"+w11[wi]+",");
+                        wi++; wj++;
+                    }
+                    else if(len < len1+1)
+                        wj++;
+                    else
+                        wi++;
+                }
+                System.err.println("\b \n");
+                w1 = w2;
+                len1 = token.length();
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception
     {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "word count");
         job.setJarByClass(WordCount.class);
-        job.setMapperClass(TokenizerMapper.class);
 
-        //job.setCombinerClass(IntSumReducer.class);
+        job.setMapperClass(TokenizerMapper.class);
         job.setReducerClass(IntSumReducer.class);
         job.setPartitionerClass(InvertPartitioner.class);
         job.setNumReduceTasks(26);
@@ -187,6 +316,46 @@ public class WordCount
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+        job.waitForCompletion(true);
+
+        //query
+
+        while(true)
+        {
+            Scanner s = new Scanner(System.in);
+            System.err.print("query> ");
+            String query = s.nextLine();            
+
+            conf = new Configuration();
+            conf.set("query", query);
+            job = Job.getInstance(conf, "word count");
+            job.setJarByClass(WordCount.class);
+
+            job.setMapperClass(QueryMapper.class);
+            job.setReducerClass(QueryReducer.class);
+
+            job.setOutputKeyClass(Text.class);
+            job.setOutputValueClass(Text.class);
+
+            StringBuilder files = new StringBuilder();
+            Set<Integer> qs = new HashSet<Integer>();
+            StringTokenizer qtok = new StringTokenizer(query);
+
+            while(qtok.hasMoreTokens())
+                qs.add((qtok.nextToken()).charAt(0)-'a');
+
+            String path = args[1]+"/"+"part-r-000";
+            for(int n : qs)
+            {
+                files.append(path);
+                files.append(n>9?"":"0");
+                files.append(Integer.toString(n));
+                files.append(",");
+            }
+            files.deleteCharAt(files.length()-1);
+            FileInputFormat.addInputPaths(job, files.toString());
+            FileOutputFormat.setOutputPath(job, new Path(args[2]));
+            job.waitForCompletion(true);
+        }
     }
 }

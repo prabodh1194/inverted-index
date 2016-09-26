@@ -128,6 +128,7 @@ query(map<string, map<int, vector<int> > >& dict)
                     }
                     cout<<"\b \n";
                     w1 = w2;
+                    len1 = querys.size();
                 }
             }
         }

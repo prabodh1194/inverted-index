@@ -190,6 +190,7 @@ public class WordCount
 
             Stemmer st = new Stemmer();
             query = st.stem(query+" ");
+            query = query.replaceAll("[^a-zA-Z0-9 ]"," ");
 
             pos = query.indexOf(word);
 
@@ -226,6 +227,7 @@ public class WordCount
 
             Stemmer st = new Stemmer();
             String query = st.stem(squery+" ");
+            query = query.replaceAll("[^a-zA-Z0-9 ]"," ");
 
             if(key.toString().length() == 0)
                 return;
@@ -335,7 +337,7 @@ public class WordCount
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        //job.waitForCompletion(true);
+        job.waitForCompletion(true);
 
         //query
 
@@ -346,6 +348,8 @@ public class WordCount
             Scanner s = new Scanner(System.in);
             System.err.print("query> ");
             String query = s.nextLine();
+            query = query.toLowerCase();
+            query = query.replaceAll("[^a-zA-Z0-9 ]"," ");
 
             if(query.length() == 0)
                 continue;
@@ -366,7 +370,13 @@ public class WordCount
             StringTokenizer qtok = new StringTokenizer(query);
 
             while(qtok.hasMoreTokens())
-                qs.add((qtok.nextToken()).charAt(0)-'a');
+            {
+                String token = qtok.nextToken();
+                if(Character.isDigit(token.charAt(0)))
+                    qs.add(token.charAt(0)-'0');
+                else
+                    qs.add(token.charAt(0)-'a');
+            }
 
             String path = args[1]+"/"+"part-r-000";
             for(int n : qs)

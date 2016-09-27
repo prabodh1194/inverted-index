@@ -29,6 +29,19 @@ def fun(word):
 def fun1(word):
     return re.split("[^a-zA-Z0-9]", word)
 
+def partitioner(tup):
+    try:
+        if(tup == -1):
+            return 0
+        if len(tup) == 0:
+            return 0
+        c = tup[0]
+        if c >= 'a':
+            return (ord(c)-ord('a'))
+        else:
+            return (ord(c)-ord('0'))
+    except:
+        return 0
 
 def mapper(word):
     global pos, idi, flag
@@ -52,6 +65,7 @@ def mapper(word):
     if flag == 0:
         return ((), [])
     
+    len1 = len(word)
     word = re.sub("[^a-zA-Z0-9 ]+", " ", word)
 
     if len(word) == 0:
@@ -60,52 +74,34 @@ def mapper(word):
     word = stemmer.stem(word+" ")
 
     pos1 = pos
-    pos += len(word)
+    pos += len1+1
 
     return (((wor, idi), [pos1]) for wor in re.split("[ ]+",word))
 
 def queryMapper(x, query):
+    x = eval(x)
     squery = stemmer.stem(query+" ")
-    if (x[0:x.index(' ')]+" ") not in squery:
+    if (x[0]+' ') not in squery:
         return ()
-    posting = x[x.index(' ')+1:]
-    posting = eval(posting)
+    posting = x[1]
     posting = zip(posting, posting[1:])[::2]
-
-    return ((tup[0], [(','.join(map(str, tup[1])),x[0:x.index(' ')])]) for tup in posting)
+    return ((tup[0], [(','.join(map(str, tup[1])),x[0])]) for tup in posting)
 
 
 if __name__ == "__main__":
     pos = idi = flag = 0
     sc = SparkContext(appName="PythonWordCount")
-    #lines = sc.textFile("a[0]")
+    #lines = sc.textFile("hdfs://localhost:54310/user/span/input/a[0-1]")
     #counts = lines.flatMap(fun) \
     #              .map(lambda x: x) \
     #              .flatMap(lambda x: mapper(x)) \
     #              .map(lambda x: ((),[]) if len(x)==0 else x) \
     #              .reduceByKey(add) \
     #              .map(lambda x: (-1, -1) if len(x[0])==0 else (x[0][0],(x[0][1],x[1]))) \
-    #              .reduceByKey(add)
-    #
-    #output = counts.collect()
-
-    #files = []
-    #for i in range(0,26):
-    #    files += [open("b"+str(i), "w")]
-
-    #for w,index in output:
-    #    if(type(w) == int):
-    #        w = str(w)
-    #    if(len(w) == 0):
-    #        continue;
-    #    if(w[0] >= 'a' and w[0] <= 'z'):
-    #        files[int(ord(w[0])-ord('a'))].write(w+" "+str(index)+" \n")
-    #    elif(w[0] >= '0' and w[0] <= '9'):
-    #        files[int(ord(w[0])-ord('0'))].write(w+" "+str(index)+" \n")
-
-    #for f in files:
-    #    f.close()
-
+    #              .reduceByKey(add) \
+    #              .partitionBy(26, lambda x: partitioner(x)) \
+    #              .saveAsTextFile("hdfs://localhost:54310/user/span/out/")
+    
     #query
     while(True):
         query = "british broadcasting corporation"
@@ -117,7 +113,7 @@ if __name__ == "__main__":
 
         filel=''
         for f in files:
-            filel += "b"+str(f)+","
+            filel += "hdfs://localhost:54310/user/span/out/part-000"+("" if f > 9 else "0")+str(f)+","
         filel = filel[:-1]
 
         lines = sc.textFile(filel)
@@ -134,7 +130,6 @@ if __name__ == "__main__":
             for tup in b:
                 m[tup[1]] = map(int, tup[0].split(','))
                 m[tup[1]].sort()
-
 
             for word in squery.split():
                 if word not in m:
@@ -159,7 +154,6 @@ if __name__ == "__main__":
 
                 while(wi < len(w11) and wj < len(w22)):
                     len2 = w22[wj]-w11[wi]
-                    print(a, w11, w22, wordlist1[0], token)
                     if(len2-1 == len1):
                         print(a,":",w11[wi],",")
                         w33 += [w22[wj]]
@@ -175,8 +169,8 @@ if __name__ == "__main__":
                 wordlist1.pop(0)
                 querySatisfied &= queryFlag
                 
-                if querySatisfied:
-                    print(a," contains the query")
+            if querySatisfied:
+                print(a," contains the query")
         break;
     
     sc.stop()

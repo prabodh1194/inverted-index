@@ -108,9 +108,8 @@ if __name__ == "__main__":
 
     #query
     while(True):
-        query = "henry hallam"
+        query = "british broadcasting corporation"
         squery = stemmer.stem(query+" ")
-        #query = raw_input("query> ")
 
         files = set()
         for tok in query.split():
@@ -118,7 +117,7 @@ if __name__ == "__main__":
 
         filel=''
         for f in files:
-            filel = "b"+str(f)+","
+            filel += "b"+str(f)+","
         filel = filel[:-1]
 
         lines = sc.textFile(filel)
@@ -128,11 +127,14 @@ if __name__ == "__main__":
 
         output = result.collect()
         for a,b in output:
+            querySatisfied=True
+            queryFlag=False
             m = {}
             flag = 0
             for tup in b:
                 m[tup[1]] = map(int, tup[0].split(','))
                 m[tup[1]].sort()
+
 
             for word in squery.split():
                 if word not in m:
@@ -143,26 +145,38 @@ if __name__ == "__main__":
                 continue
 
             wordlist = squery.split()
+            wordlist1 = query.split()
             token = wordlist[0]
-            len1 = len(token)
+            len1 = len(wordlist1[0])
+            wordlist1.pop(0)
             w11 = m[token]
 
             for token in wordlist[1:]:
                 w22 = m[token]
                 wi = wj = 0
+                queryFlag = False
+                w33 = []
 
                 while(wi < len(w11) and wj < len(w22)):
                     len2 = w22[wj]-w11[wi]
+                    print(a, w11, w22, wordlist1[0], token)
                     if(len2-1 == len1):
-                        print(a,":",w11[wi],",",)
+                        print(a,":",w11[wi],",")
+                        w33 += [w22[wj]]
                         wi += 1
                         wj += 1
+                        queryFlag = True
                     elif(len2 < len1+1):
                         wj += 1
                     else:
                         wi += 1
-                w11 = w22
-                len1 = len(token)
+                w11 = w33
+                len1 = len(wordlist1[0])
+                wordlist1.pop(0)
+                querySatisfied &= queryFlag
+                
+                if querySatisfied:
+                    print(a," contains the query")
         break;
     
     sc.stop()

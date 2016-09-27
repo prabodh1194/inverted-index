@@ -21,9 +21,13 @@ from operator import add
 
 from pyspark import SparkContext
 import re
+import stemmer
 
 def fun(word):
-    return re.split('[ \n]+', word)
+    return re.split("[ \n]+", word)
+
+def fun1(word):
+    return re.split("[^a-zA-Z0-9]", word)
 
 
 def mapper(word):
@@ -48,25 +52,117 @@ def mapper(word):
     if flag == 0:
         return ((), [])
     
-    pos1 = pos
-    pos += len(word)+1
+    word = re.sub("[^a-zA-Z0-9 ]+", " ", word)
 
-    return ((word, idi), [pos1])
+    if len(word) == 0:
+        return ((), [])
+
+    word = stemmer.stem(word+" ")
+
+    pos1 = pos
+    pos += len(word)
+
+    return (((wor, idi), [pos1]) for wor in re.split("[ ]+",word))
+
+def queryMapper(x, query):
+    squery = stemmer.stem(query+" ")
+    if (x[0:x.index(' ')]+" ") not in squery:
+        return ()
+    posting = x[x.index(' ')+1:]
+    posting = eval(posting)
+    posting = zip(posting, posting[1:])[::2]
+
+    return ((tup[0], [(','.join(map(str, tup[1])),x[0:x.index(' ')])]) for tup in posting)
+
 
 if __name__ == "__main__":
     pos = idi = flag = 0
     sc = SparkContext(appName="PythonWordCount")
-    lines = sc.textFile("[0-1]")
-    print(lines)
-    counts = lines.flatMap(fun) \
-                  .map(lambda x: mapper(x)) \
-                  .reduceByKey(add) \
-                  .map(lambda x: (-1, -1) if len(x[0])==0 else (x[0][0],(x[0][1],x[1]))) \
-                  .reduceByKey(add) \
-                  #.map(lambda x: print(x, len(x)))
-    
-    output = counts.collect()
-    for word,count in output:
-        print (word, count)
+    #lines = sc.textFile("a[0]")
+    #counts = lines.flatMap(fun) \
+    #              .map(lambda x: x) \
+    #              .flatMap(lambda x: mapper(x)) \
+    #              .map(lambda x: ((),[]) if len(x)==0 else x) \
+    #              .reduceByKey(add) \
+    #              .map(lambda x: (-1, -1) if len(x[0])==0 else (x[0][0],(x[0][1],x[1]))) \
+    #              .reduceByKey(add)
+    #
+    #output = counts.collect()
+
+    #files = []
+    #for i in range(0,26):
+    #    files += [open("b"+str(i), "w")]
+
+    #for w,index in output:
+    #    if(type(w) == int):
+    #        w = str(w)
+    #    if(len(w) == 0):
+    #        continue;
+    #    if(w[0] >= 'a' and w[0] <= 'z'):
+    #        files[int(ord(w[0])-ord('a'))].write(w+" "+str(index)+" \n")
+    #    elif(w[0] >= '0' and w[0] <= '9'):
+    #        files[int(ord(w[0])-ord('0'))].write(w+" "+str(index)+" \n")
+
+    #for f in files:
+    #    f.close()
+
+    #query
+    while(True):
+        query = "henry hallam"
+        squery = stemmer.stem(query+" ")
+        #query = raw_input("query> ")
+
+        files = set()
+        for tok in query.split():
+            files.add(int(ord(tok[0])-ord('a')))
+
+        filel=''
+        for f in files:
+            filel = "b"+str(f)+","
+        filel = filel[:-1]
+
+        lines = sc.textFile(filel)
+
+        result = lines.flatMap(lambda x: queryMapper(x, query)) \
+                      .reduceByKey(add)
+
+        output = result.collect()
+        for a,b in output:
+            m = {}
+            flag = 0
+            for tup in b:
+                m[tup[1]] = map(int, tup[0].split(','))
+                m[tup[1]].sort()
+
+            for word in squery.split():
+                if word not in m:
+                    flag = 1
+                    break
+
+            if(flag == 1):
+                continue
+
+            wordlist = squery.split()
+            token = wordlist[0]
+            len1 = len(token)
+            w11 = m[token]
+
+            for token in wordlist[1:]:
+                w22 = m[token]
+                wi = wj = 0
+
+                while(wi < len(w11) and wj < len(w22)):
+                    len2 = w22[wj]-w11[wi]
+                    if(len2-1 == len1):
+                        print(a,":",w11[wi],",",)
+                        wi += 1
+                        wj += 1
+                    elif(len2 < len1+1):
+                        wj += 1
+                    else:
+                        wi += 1
+                w11 = w22
+                len1 = len(token)
+        break;
     
     sc.stop()

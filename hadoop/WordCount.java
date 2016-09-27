@@ -276,9 +276,6 @@ public class WordCount
 
                 wi = wj = 0;
 
-                System.out.println(Arrays.toString(w11));
-                System.out.println(Arrays.toString(w22));
-
                 while(wi < w1.length && wj < w2.length)
                 {
                     len = w22[wj] - w11[wi];

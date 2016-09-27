@@ -301,7 +301,9 @@ public class WordCount
                     else
                         wi++;
                 }
-                System.err.println("\b ");
+
+                if(queryFlag)
+                    System.err.println("\b ");
                 w11 = new int[w33.length];
 
                 for(int i = 0; i < w33.length; i++)

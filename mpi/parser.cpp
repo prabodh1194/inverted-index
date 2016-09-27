@@ -21,8 +21,8 @@ query(map<string, map<int, vector<int> > >& dict)
     MPI_Status status;
     if(world_rank == 0)
     {
-        vector<int> s1, s2, w1, w2;
-        string query, querys;
+        vector<int> s1, s2, w1, w2, w3;
+        string squery, squerys, query, querys;
         int c = 0;
         while(true)
         {
@@ -30,8 +30,8 @@ query(map<string, map<int, vector<int> > >& dict)
             s1.clear();
             s2.clear();
             cout << "query> ";
-            getline(cin, query);
-            if(query.size() == 0)
+            getline(cin, squery);
+            if(squery.size() == 0)
             {
                 c++;
                 if(c == 2)
@@ -40,7 +40,7 @@ query(map<string, map<int, vector<int> > >& dict)
             }
             else
                 c = 0;
-            query = stemfile(query);
+            query = stemfile(squery);
             stringstream ss(query);
 
             while(ss >> querys)
@@ -102,34 +102,48 @@ query(map<string, map<int, vector<int> > >& dict)
             for(int docid : s1)
             {
                 int len1, len, wi = 0, wj = 0;
+                bool querySatisfied = true, queryFlag = false;
                 stringstream ss(query);
+                stringstream ss1(squery);
                 ss >> querys;
-                len1 = querys.size();
+                ss1 >> squerys;
+                len1 = squerys.size();
                 w1 = resultmap[querys][docid];
                 while(ss >> querys)
                 {
+                    ss1 >> squerys;
                     w2 = resultmap[querys][docid];
-
                     //merge
 
                     wi = wj = 0;
+                    queryFlag = false;
+
                     while(wi < w1.size() && wj < w2.size())
                     {
                         len = w2[wj] - w1[wi];
                         if(len-1 == len1)
                         {
-                            cout<<docid<<",";
+                            cout<<docid<<":"<<w2[wj]<<",";
+                            w3.push_back(w2[wj]);
                             wi++; wj++;
+                            queryFlag = true;
                         }
                         else if(len < len1+1)
                             wj++;
                         else
                             wi++;
                     }
-                    cout<<"\b \n";
-                    w1 = w2;
-                    len1 = querys.size();
+
+                    if(queryFlag)
+                        cout<<"\b \n";
+                    w1 = w3;
+                    w3.clear();
+                    len1 = squerys.size();
+                    querySatisfied &= queryFlag;
                 }
+
+                if(querySatisfied)
+                    cout<<docid<<" contains the query\n";
             }
         }
     }
@@ -234,6 +248,7 @@ parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> >
             cerr<<"\r"<<tots<<"/"<<fsize<<"("<<world_rank<<"-"<<(tots*100/fsize)<<"%)";
             id.clear();
             flag = 0;
+            pos = 0;
             continue;
         }
 

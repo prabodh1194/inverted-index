@@ -103,13 +103,17 @@ if __name__ == "__main__":
     #              .saveAsTextFile("hdfs://localhost:54310/user/span/out/")
     
     #query
-    while(True):
-        query = "british broadcasting corporation"
+    querys = open("query","r")
+    for query in querys:
+        query = query[:-1]
+        print (query)
+        query = query.lower()
+        query = re.sub("[^a-zA-Z0-9 ]"," ", query)
         squery = stemmer.stem(query+" ")
 
         files = set()
         for tok in query.split():
-            files.add(int(ord(tok[0])-ord('a')))
+            files.add(int(ord(tok[0])-(ord('a') if tok[0]>='a' else ord('0'))))
 
         filel=''
         for f in files:
@@ -171,6 +175,5 @@ if __name__ == "__main__":
                 
             if querySatisfied:
                 print(a," contains the query")
-        break;
     
     sc.stop()

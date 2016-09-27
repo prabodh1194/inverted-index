@@ -69,13 +69,14 @@ public class WordCount
                 {
                     id = "";
                     flag = 0;
+                    pos = 0;
                     continue;
                 }
 
                 if(id.equals(""))
                 {
                     m = reid.matcher(token);
-                    if(!m.find())                    
+                    if(!m.find())
                         continue;
                     id = m.group(1);
                     continue;
@@ -199,7 +200,7 @@ public class WordCount
             }
 
             pairs = (value.toString()).substring(word.length());
-            
+
             StringTokenizer tok = new StringTokenizer(pairs, ",");
 
             while(tok.hasMoreTokens())
@@ -218,13 +219,13 @@ public class WordCount
         public void reduce(Text key, Iterable<Text> values, Context context ) throws IOException, InterruptedException
         {
             Configuration conf = context.getConfiguration();
-            String query = conf.get("query");
+            String squery = conf.get("query");
             String token, word, posList;
             int pos;
             Map<String, String> m = new HashMap<String, String>();
 
             Stemmer st = new Stemmer();
-            query = st.stem(query+" ");
+            String query = st.stem(squery+" ");
 
             if(key.toString().length() == 0)
                 return;
@@ -235,6 +236,13 @@ public class WordCount
                 pos = word.indexOf(':');
                 posList = word.substring(pos+1);
                 word = word.substring(0,pos);
+
+                if(query.indexOf(' ') == -1 || query.indexOf(' ') == query.length()-1)
+                {
+                    System.err.println(key+" "+posList);
+                    return;
+                }
+
                 m.put(word, posList);
             }
 
@@ -247,14 +255,16 @@ public class WordCount
             }
 
             tok = new StringTokenizer(query);
+            StringTokenizer tok1 = new StringTokenizer(squery);
             String w1[], w2[];
-            int wi=0, wj=0, len, len1;
-            int w11[], w22[]; 
+            int wi=0, wj=0, wk=0, len, len1;
+            int w11[], w22[], w33[];
+            boolean querySatisfied = true, queryFlag = false;
 
             token = tok.nextToken();
-            len1 = token.length();
+            len1 = (tok1.nextToken()).length();
             w1 = (m.get(token)).split(":");
-            
+
             w11 = new int[w1.length];
 
             for(int i = 0; i < w1.length; i++)
@@ -267,29 +277,42 @@ public class WordCount
                 w2 = (m.get(token)).split(":");
                 w22 = new int[w2.length];
 
+                w33 = new int[(w22.length < w11.length ? w22.length:w11.length)];
+
                 for(int i = 0; i < w2.length; i++)
                     w22[i] = Integer.parseInt(w2[i]);
                 Arrays.sort(w22);
 
-                wi = wj = 0;
+                wi = wj = wk = 0;
+                queryFlag = false;
 
-                while(wi < w1.length && wj < w2.length)
+                while(wi < w11.length && wj < w22.length)
                 {
                     len = w22[wj] - w11[wi];
                     if(len-1 == len1)
                     {
                         System.err.print(key+":"+w11[wi]+",");
-                        wi++; wj++;
+                        w33[wk] = w22[wj];
+                        wi++; wj++; wk++;
+                        queryFlag = true;
                     }
                     else if(len < len1+1)
                         wj++;
                     else
                         wi++;
                 }
-                System.err.println("\b \n");
-                w1 = w2;
-                len1 = token.length();
+                System.err.println("\b ");
+                w11 = new int[w33.length];
+
+                for(int i = 0; i < w33.length; i++)
+                    w11[i] = w33[i];
+
+                len1 = (tok1.nextToken()).length();
+                querySatisfied &= queryFlag;
             }
+
+            if(querySatisfied)
+                System.err.println(key+" contains the query term");
         }
     }
 
@@ -310,7 +333,7 @@ public class WordCount
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        job.waitForCompletion(true);
+        //job.waitForCompletion(true);
 
         //query
 
@@ -320,7 +343,7 @@ public class WordCount
         {
             Scanner s = new Scanner(System.in);
             System.err.print("query> ");
-            String query = s.nextLine();            
+            String query = s.nextLine();
 
             if(query.length() == 0)
                 continue;

@@ -235,7 +235,6 @@ public class WordCount
                 pos = word.indexOf(':');
                 posList = word.substring(pos+1);
                 word = word.substring(0,pos);
-                System.out.println(key+" "+word+" "+posList+" "+pos);
                 m.put(word, posList);
             }
 
@@ -246,8 +245,6 @@ public class WordCount
                 if(m.get(tok.nextToken()) == null)
                     return;
             }
-
-            System.out.println("Start merging");
 
             tok = new StringTokenizer(query);
             String w1[], w2[];
@@ -317,11 +314,16 @@ public class WordCount
 
         //query
 
+        int queryNum = 0;
+
         while(true)
         {
             Scanner s = new Scanner(System.in);
             System.err.print("query> ");
             String query = s.nextLine();            
+
+            if(query.length() == 0)
+                continue;
 
             conf = new Configuration();
             conf.set("query", query);
@@ -351,7 +353,7 @@ public class WordCount
             }
             files.deleteCharAt(files.length()-1);
             FileInputFormat.addInputPaths(job, files.toString());
-            FileOutputFormat.setOutputPath(job, new Path(args[2]));
+            FileOutputFormat.setOutputPath(job, new Path(args[2]+"/out"+Integer.toString(queryNum++)));
             job.waitForCompletion(true);
         }
     }

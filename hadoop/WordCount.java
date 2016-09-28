@@ -40,17 +40,9 @@ public class WordCount
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
-            FileInputStream fis = new FileInputStream(new File("stopwords.dat"));
-            BufferedReader br = new BufferedReader(new InputStreamReader(fis));
             String token, line = null;
-            ArrayList<String> sw = new ArrayList<String>();
             Stemmer st = new Stemmer();
             long len;
-
-            while((line = br.readLine()) != null)
-                sw.add(line);
-
-            br.close();
 
             Set<Integer> set = new HashSet<Integer>();
             Map<String, Set<Integer> > dict = new HashMap<String, Set<Integer> >();
@@ -105,8 +97,6 @@ public class WordCount
                 {
                     token = strtok1.nextToken();
                     token += " ";
-                    if(Collections.binarySearch(sw, token) >= 0)
-                        continue;
                     token = st.stem(token);
                     word.set(token);
                     context.write(word, new Text(sb.toString()));

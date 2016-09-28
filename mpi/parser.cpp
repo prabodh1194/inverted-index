@@ -289,7 +289,7 @@ reduce(map<string, map<int, vector<int> > >& dict)
 }
 
 void
-parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> > >& dict, size_t fsize)
+parse(ifstream &fp, map<string, map<int, vector<int> > >& dict, size_t fsize)
 {
     size_t len, pos=0, tots=0;
     int idi, flag = 0;
@@ -340,9 +340,6 @@ parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> >
 
         while(ss >> token)
         {
-            if(binary_search(sw.begin(), sw.end(), token))
-                continue;
-
             //stem
             doc += token + " ";
         }
@@ -357,7 +354,7 @@ parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> >
 }
 
 void
-createIndex(const vector<string>& sw)
+createIndex()
 {
     int i = world_rank;
     string stopwords, line, title = "";
@@ -376,7 +373,7 @@ createIndex(const vector<string>& sw)
 
         struct stat st;
         stat(file.c_str(), &st);
-        parse(fp, sw, dict, st.st_size);
+        parse(fp, dict, st.st_size);
         fp.close();
         i += size;
     }
@@ -424,17 +421,8 @@ main(void)
 
     string stopwords;
     map<string, map<int, vector<int> > > dict;
-    vector<string> sw;
 
-    ifstream swfp ("stopwords.dat");
-    while(!swfp.eof())
-    {
-        swfp >> stopwords;
-        sw.push_back(stopwords);
-    }
-    swfp.close();
-
-    createIndex(sw);
+    createIndex();
 
     cerr<<"Done "<<world_rank<<"\n";
     //start reduce

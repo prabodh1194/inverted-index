@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "porter.h"
+#include <chrono>
 #include <cmath>
 
 using namespace std;
@@ -54,24 +55,35 @@ query()
     {
         vector<int> s1, s2, w1, w2, w3;
         string squery, squerys, query, querys;
-        int c = 0;
+        int c = 0, query_num = 0;
+        ofstream graph("graph_mpi", ofstream::out);
+        graph <<"query, time\n";
+
         while(true)
         {
+            query_num++;
+
             map<string, map<int, vector<int> > > resultmap;
             s1.clear();
             s2.clear();
             cout << "query> ";
             getline(cin, squery);
+            chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
             if(squery.size() == 0)
             {
                 c++;
                 if(c == 2)
+                {
+                    graph.close();
                     return;
+                }
                 continue;
             }
             else
                 c = 0;
             query = stemfile(squery);
+            regex alpha ("[^[:alpha:]0-9 ]");
+            query = regex_replace(query, alpha, " ");
             stringstream ss(query);
 
             while(ss >> querys)
@@ -178,6 +190,10 @@ query()
                 if(querySatisfied)
                     cout<<docid<<" contains the query\n";
             }
+            chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
+
+            chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double> >(t2 - t1);
+            graph << query_num << ", " << time_span.count()*1000<<"\n";
         }
     }
     else
@@ -214,10 +230,10 @@ reduce(map<string, map<int, vector<int> > >& dict)
 
     ofstream ofs[26];
 
-    for(int i = 0; i < numFiles; i++)
+    for(int j = world_rank; j < 26; j+=size)
     {
-        string out1 = "inout_"+to_string(i*size+world_rank);
-        ofs[i].open(out1.c_str(), ofstream::out);
+        string out1 = "inout_"+to_string(j);
+        ofs[j].open(out1.c_str(), ofstream::out);
     }
 
     for(int i = 0; i < size; i++)
@@ -249,7 +265,6 @@ reduce(map<string, map<int, vector<int> > >& dict)
                 dest = it->first[0]-'a';
             else
                 dest = it->first[0]-'0';
-            dest = dest % numFiles;
             myset = it->second;
             ofs[dest] << it->first << " ";
             for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
@@ -338,6 +353,7 @@ parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> >
             dict[token][idi].push_back(pos);
         pos += len+1;
     }
+    return;
 }
 
 void
@@ -352,8 +368,10 @@ createIndex(const vector<string>& sw)
     {
         string file = to_string(i);
         ifstream fp (file.c_str());
-        if(fp.fail())
+        if(!fp.good())
+        {
             break;
+        }
         cerr<<"Parse "<<file<<"from " <<world_rank<<"\n";
 
         struct stat st;
@@ -392,6 +410,7 @@ createIndex(const vector<string>& sw)
 
     for(i = 0; i < size; i++)
         ofs[i].close();
+    return;
 }
 
 int
@@ -415,10 +434,12 @@ main(void)
     }
     swfp.close();
 
-    //createIndex(sw);
+    createIndex(sw);
 
+    cerr<<"Done "<<world_rank<<"\n";
     //start reduce
-    //reduce(dict);
+    MPI_Barrier(MPI_COMM_WORLD);
+    reduce(dict);
 
     MPI_Barrier(MPI_COMM_WORLD);
 

@@ -20,7 +20,7 @@ from __future__ import print_function
 from operator import add
 
 from pyspark import SparkContext
-import re
+import re, time
 import stemmer
 
 def fun(word):
@@ -104,7 +104,11 @@ if __name__ == "__main__":
     
     #query
     querys = open("query","r")
+    graph = open("graph_spark", "w")
+    query_num = 0
     for query in querys:
+        query_num += 1
+        start = time.clock()
         query = query[:-1]
         print (query)
         query = query.lower()
@@ -175,5 +179,9 @@ if __name__ == "__main__":
                 
             if querySatisfied:
                 print(a," contains the query")
+        graph.write(str(query_num))
+        graph.write(", ")
+        graph.write(str(time.clock()-start))
+    graph.close()
     
     sc.stop()

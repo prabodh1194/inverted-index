@@ -10,14 +10,45 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "porter.h"
+#include <cmath>
 
 using namespace std;
 
 int size, world_rank;
 
 void
-query(map<string, map<int, vector<int> > >& dict)
+loadDict(map<string, map<int, vector<int> > >& dict, string& querys)
 {
+    int i = querys[0]-(querys[0]>='a'?'a':'0');
+    string term, postingList, out = "inout_"+to_string(i);
+    ifstream ifs(out.c_str());
+    int id;
+    char *pos;
+
+    while(!ifs.eof())
+    {
+        ifs >> term >> postingList;
+
+        if(term != querys)
+            continue;
+
+        stringstream ss(postingList);
+        while(getline(ss, postingList, ','))
+        {
+            char ll[postingList.size()];
+            strcpy(ll, postingList.c_str());
+            id = atoi(strtok(ll,":|"));
+            while((pos = strtok(NULL,":|")) != NULL)
+                dict[term][id].push_back(atoi(pos));
+        }
+    }
+    ifs.close();
+}
+
+void
+query()
+{
+    map<string, map<int, vector<int> > > dict;
     MPI_Status status;
     if(world_rank == 0)
     {
@@ -45,10 +76,11 @@ query(map<string, map<int, vector<int> > >& dict)
 
             while(ss >> querys)
             {
-                int i = querys[0]-'a';
-                i = i % size;
+                int i = querys[0]-(querys[0]>='a'?'a':'0');
+                i = i%size;
                 if(i == 0)
                 {
+                    loadDict(dict, querys);
                     resultmap[querys] = dict[querys];
                     map<int, vector<int> > myset = dict[querys];
                     s2.resize(myset.size());
@@ -69,7 +101,6 @@ query(map<string, map<int, vector<int> > >& dict)
                         continue;
 
                     char res[charSize];
-                    resultmap[querys] = dict[querys];
                     map<int, vector<int> > myset = dict[querys];
                     char *pos;
 
@@ -78,6 +109,8 @@ query(map<string, map<int, vector<int> > >& dict)
                     int id = atoi(strtok(res,":|"));
                     while((pos = strtok(NULL,":|")) != NULL)
                         myset[id].push_back(atoi(pos));
+
+                    resultmap[querys] = myset;
 
                     s2.resize(myset.size());
                     int k = 0;
@@ -123,7 +156,7 @@ query(map<string, map<int, vector<int> > >& dict)
                         len = w2[wj] - w1[wi];
                         if(len-1 == len1)
                         {
-                            cout<<docid<<":"<<w2[wj]<<",";
+                            cout<<docid<<":"<<w1[wi]<<",";
                             w3.push_back(w2[wj]);
                             wi++; wj++;
                             queryFlag = true;
@@ -155,6 +188,7 @@ query(map<string, map<int, vector<int> > >& dict)
             char res[256];
             MPI_Recv(&res, 256, MPI_CHAR, 0, 1, MPI_COMM_WORLD, &status);
             string querys(res);
+            loadDict(dict, querys);
             map<int, vector<int> > myset = dict[querys];
             result = "";
             for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
@@ -174,11 +208,17 @@ query(map<string, map<int, vector<int> > >& dict)
 void
 reduce(map<string, map<int, vector<int> > >& dict)
 {
-    string list, token, out, out1;
+    string list, token, out;
     char *pos;
-    out1 = "inout_"+to_string(world_rank)+"_"+to_string(world_rank);
-    ofstream ofs(out1.c_str(), ofstream::out);
-    int id;
+    int id, numFiles = (int)ceil(26/size);
+
+    ofstream ofs[26];
+
+    for(int i = 0; i < numFiles; i++)
+    {
+        string out1 = "inout_"+to_string(i*size+world_rank);
+        ofs[i].open(out1.c_str(), ofstream::out);
+    }
 
     for(int i = 0; i < size; i++)
     {
@@ -204,25 +244,33 @@ reduce(map<string, map<int, vector<int> > >& dict)
 
         for (map<string, map<int, vector<int> > >::iterator it=dict.begin(); it!=dict.end(); ++it)
         {
+            int dest;
+            if(it->first[0]>='a')
+                dest = it->first[0]-'a';
+            else
+                dest = it->first[0]-'0';
+            dest = dest % numFiles;
             myset = it->second;
-            ofs << it->first << " ";
+            ofs[dest] << it->first << " ";
             for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
             {
-                ofs << it1->first << '|';
+                ofs[dest] << it1->first << '|';
                 for(int pos : it1->second)
-                    ofs << pos << ':';
-                long pos = ofs.tellp();
-                ofs.seekp(pos-1);
-                ofs << ",";
+                    ofs[dest] << pos << ':';
+                long pos = ofs[dest].tellp();
+                ofs[dest].seekp(pos-1);
+                ofs[dest] << ",";
             }
-            long pos = ofs.tellp();
-            ofs.seekp(pos-1);
-            ofs << "\n";
+            long pos = ofs[dest].tellp();
+            ofs[dest].seekp(pos-1);
+            ofs[dest] << "\n";
         }
 
         ifs.close();
     }
-    ofs.close();
+
+    for(int i = 0; i < numFiles; i++)
+        ofs[i].close();
 }
 
 void
@@ -270,7 +318,7 @@ parse(ifstream &fp, const vector<string>& sw, map<string, map<int, vector<int> >
             continue;
 
         transform(line.begin(), line.end(), line.begin(), ::tolower);
-        regex alpha ("[^[:alpha:] ]");
+        regex alpha ("[^[:alpha:]0-9 ]");
         line = regex_replace(line, alpha, " ");
 
         stringstream ss(line);
@@ -326,7 +374,7 @@ createIndex(const vector<string>& sw)
     for (map<string, map<int, vector<int> > >::iterator it=dict.begin(); it!=dict.end(); ++it)
     {
         myset = it->second;
-        int ch = it->first[0]-'a';
+        int ch = it->first[0]-(it->first[0]>='a'?'a':'0');
         ofs[ch % size] << it->first << " ";
         for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
         {
@@ -370,11 +418,11 @@ main(void)
     //createIndex(sw);
 
     //start reduce
-    reduce(dict);
+    //reduce(dict);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    query(dict);
+    query();
 
     MPI_Finalize();
     return 0;

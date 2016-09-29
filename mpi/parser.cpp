@@ -42,6 +42,7 @@ loadDict(map<string, map<int, vector<int> > >& dict, string& querys)
             while((pos = strtok(NULL,":|")) != NULL)
                 dict[term][id].push_back(atoi(pos));
         }
+        break;
     }
     ifs.close();
 }
@@ -57,17 +58,23 @@ query()
         string squery, squerys, query, querys;
         int c = 0, query_num = 0;
         ofstream graph("graph_mpi", ofstream::out);
+
         graph <<"query, time\n";
+        ifstream ifquery("query");
 
         while(true)
         {
             query_num++;
 
+            if(query_num >= 1000)
+                graph.close();
+
             map<string, map<int, vector<int> > > resultmap;
             s1.clear();
             s2.clear();
-            cout << "query> ";
-            getline(cin, squery);
+            cerr <<query_num<< " query> ";
+            getline(ifquery, squery);
+            cerr << squery << "\n";
             chrono::high_resolution_clock::time_point t1 = chrono::high_resolution_clock::now();
             if(squery.size() == 0)
             {
@@ -193,8 +200,9 @@ query()
             chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
 
             chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double> >(t2 - t1);
-            graph << query_num << ", " << time_span.count()*1000<<"\n";
+            graph << query_num << ", " << time_span.count()*1000<<endl;
         }
+        ifquery.close();
     }
     else
     {
@@ -422,12 +430,12 @@ main(void)
     string stopwords;
     map<string, map<int, vector<int> > > dict;
 
-    createIndex();
+    //createIndex();
 
     cerr<<"Done "<<world_rank<<"\n";
     //start reduce
     MPI_Barrier(MPI_COMM_WORLD);
-    reduce(dict);
+    //reduce(dict);
 
     MPI_Barrier(MPI_COMM_WORLD);
 

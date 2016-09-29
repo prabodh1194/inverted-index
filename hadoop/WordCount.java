@@ -331,13 +331,19 @@ public class WordCount
 
         //query
 
-        int queryNum = 0;
+        File file = new File("query");
+        Scanner sc = new Scanner(file);
+        int queryNum = 1;
+        long startTime, endTime;
+        double duration;
 
-        while(true)
+        while(sc.hasNextLine())
         {
-            Scanner s = new Scanner(System.in);
-            System.err.print("query> ");
-            String query = s.nextLine();
+            startTime = System.nanoTime();
+
+            System.err.print(queryNum+" query> ");
+            String query = sc.nextLine();
+            System.err.println(query);
             query = query.toLowerCase();
             query = query.replaceAll("[^a-zA-Z0-9 ]"," ");
 
@@ -378,8 +384,13 @@ public class WordCount
             }
             files.deleteCharAt(files.length()-1);
             FileInputFormat.addInputPaths(job, files.toString());
-            FileOutputFormat.setOutputPath(job, new Path(args[2]+"/out"+Integer.toString(queryNum++)));
+            FileOutputFormat.setOutputPath(job, new Path(args[2]+"/out"+Integer.toString(queryNum)));
             job.waitForCompletion(true);
+            endTime = System.nanoTime();
+            duration = (endTime - startTime)/1000000;
+            System.out.println(queryNum+" "+duration);
+            queryNum++;
         }
+        sc.close();
     }
 }

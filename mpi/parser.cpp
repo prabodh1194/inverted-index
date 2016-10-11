@@ -263,33 +263,33 @@ reduce(map<string, map<int, vector<int> > >& dict)
             }
         }
 
-        //debug
-        map<int, vector<int> > myset;
+        ifs.close();
+    }
 
-        for (map<string, map<int, vector<int> > >::iterator it=dict.begin(); it!=dict.end(); ++it)
+    //debug
+    map<int, vector<int> > myset;
+
+    for (map<string, map<int, vector<int> > >::iterator it=dict.begin(); it!=dict.end(); ++it)
+    {
+        int dest;
+        if(it->first[0]>='a')
+            dest = it->first[0]-'a';
+        else
+            dest = it->first[0]-'0';
+        myset = it->second;
+        ofs[dest] << it->first << " ";
+        for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
         {
-            int dest;
-            if(it->first[0]>='a')
-                dest = it->first[0]-'a';
-            else
-                dest = it->first[0]-'0';
-            myset = it->second;
-            ofs[dest] << it->first << " ";
-            for (map<int, vector<int> >::iterator it1=myset.begin(); it1!=myset.end(); ++it1)
-            {
-                ofs[dest] << it1->first << '|';
-                for(int pos : it1->second)
-                    ofs[dest] << pos << ':';
-                long pos = ofs[dest].tellp();
-                ofs[dest].seekp(pos-1);
-                ofs[dest] << ",";
-            }
+            ofs[dest] << it1->first << '|';
+            for(int pos : it1->second)
+                ofs[dest] << pos << ':';
             long pos = ofs[dest].tellp();
             ofs[dest].seekp(pos-1);
-            ofs[dest] << "\n";
+            ofs[dest] << ",";
         }
-
-        ifs.close();
+        long pos = ofs[dest].tellp();
+        ofs[dest].seekp(pos-1);
+        ofs[dest] << "\n";
     }
 
     for(int i = 0; i < numFiles; i++)
@@ -430,12 +430,12 @@ main(void)
     string stopwords;
     map<string, map<int, vector<int> > > dict;
 
-    //createIndex();
+    createIndex();
 
     cerr<<"Done "<<world_rank<<"\n";
     //start reduce
     MPI_Barrier(MPI_COMM_WORLD);
-    //reduce(dict);
+    reduce(dict);
 
     MPI_Barrier(MPI_COMM_WORLD);
 

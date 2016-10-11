@@ -122,12 +122,19 @@ query()
                     char res[charSize];
                     map<int, vector<int> > myset = dict[querys];
                     char *pos;
+                    string part;
 
                     MPI_Recv(&res, charSize, MPI_CHAR, i, 1, MPI_COMM_WORLD, &status);
 
-                    int id = atoi(strtok(res,":|"));
-                    while((pos = strtok(NULL,":|")) != NULL)
-                        myset[id].push_back(atoi(pos));
+                    stringstream ss(res);
+                    while(getline(ss, part, ','))
+                    {
+                        char postingList[part.size()];
+                        strcpy(postingList, part.c_str());
+                        int id = atoi(strtok(postingList,":|"));
+                        while((pos = strtok(NULL,":|")) != NULL)
+                            myset[id].push_back(atoi(pos));
+                    }
 
                     resultmap[querys] = myset;
 
@@ -212,6 +219,7 @@ query()
             char res[256];
             MPI_Recv(&res, 256, MPI_CHAR, 0, 1, MPI_COMM_WORLD, &status);
             string querys(res);
+            //cerr<<querys<<" "<<world_rank;
             loadDict(dict, querys);
             map<int, vector<int> > myset = dict[querys];
             result = "";
@@ -430,12 +438,12 @@ main(void)
     string stopwords;
     map<string, map<int, vector<int> > > dict;
 
-    createIndex();
+    //createIndex();
 
     cerr<<"Done "<<world_rank<<"\n";
     //start reduce
     MPI_Barrier(MPI_COMM_WORLD);
-    reduce(dict);
+    //reduce(dict);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
